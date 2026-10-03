@@ -11,11 +11,12 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 
 extern CGameValues game_values;
 extern CResourceManager* rm;
 
-extern short joystickcount;
+extern int joystickcount;
 
 
 namespace {
@@ -92,12 +93,12 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
         if (event.type == SDL_KEYDOWN)
         {
             printf("*********** Key Down ***********\n");
-            printf("Keysym: %d\n", event.key.keysym.sym);
+            printf("Keysym: %d\n", event.key.key);
             printf("State: %d\n", event.key.state);
             printf("Type: %d\n", event.key.type);
             printf("Which: %d\n\n", event.key.which);
         }
-        else if (event.type == SDL_MOUSEMOTION)
+        else if (event.type == SDL_EVENT_MOUSE_MOTION)
         {
             printf("*********** Mouse Motion ***********\n");
             printf("X: %d\n", event.motion.x);
@@ -106,7 +107,7 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
             printf("Type: %d\n", event.motion.type);
             printf("Which: %d\n\n", event.motion.which);
         }
-        else if (event.type == SDL_MOUSEBUTTONDOWN)
+        else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
         {
             printf("*********** Mouse Button ***********\n");
             printf("Button: %d\n", event.button.button);
@@ -114,14 +115,14 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
             printf("Type: %d\n", event.button.type);
             printf("Which: %d\n\n", event.button.which);
         }
-        else if (event.type == SDL_JOYHATMOTION)
+        else if (event.type == SDL_EVENT_JOYSTICK_HAT_MOTION)
         {
             printf("*********** Joystick Hat ***********\n");
             printf("Value: %d\n", event.jhat.value);
             printf("Type: %d\n", event.jhat.type);
             printf("Which: %d\n\n", event.jhat.which);
         }
-        else if (event.type == SDL_JOYAXISMOTION)
+        else if (event.type == SDL_EVENT_JOYSTICK_AXIS_MOTION)
         {
             printf("*********** Joystick Motion ***********\n");
             printf("Value: %d\n", event.jaxis.value);
@@ -129,7 +130,7 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
             printf("Type: %d\n", event.jaxis.type);
             printf("Which: %d\n\n", event.jaxis.which);
         }
-        else if (event.type == SDL_JOYBUTTONDOWN)
+        else if (event.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN)
         {
             printf("*********** Joystick Button ***********\n");
             printf("Button: %d\n", event.jbutton.button);
@@ -159,12 +160,12 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
         */
 
         if (iDevice == DEVICE_KEYBOARD) {
-            if (event.type == SDL_KEYDOWN) {
-                const SDL_Keycode key = event.key.keysym.sym;
+            if (event.type == SDL_EVENT_KEY_DOWN) {
+                const SDL_Keycode key = event.key.key;
 
                 SetKey(iKey, key, iDevice);
                 done = true;
-            } else if (event.type == SDL_MOUSEMOTION) {
+            } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
                 short xmag = (short)abs(event.motion.xrel);
                 short ymag = (short)abs(event.motion.yrel);
 
@@ -188,17 +189,51 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
                     SetKey(iKey, key, iDevice);
                     done = true;
                 }
-            } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 const SDL_Keycode key = event.button.button + MOUSE_BUTTON_START;
                 SetKey(iKey, key, iDevice);
                 done = true;
             }
         } else {
-            if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
+#ifdef __ANDROID__
+            int count = 0;
+            SDL_JoystickID* ids = SDL_GetJoysticks(&count);
+            const SDL_JoystickID selected = ids && iDevice >= 0 && iDevice < count ? ids[iDevice] : 0;
+            SDL_free(ids);
+            if ((event.type == SDL_EVENT_JOYSTICK_HAT_MOTION || event.type == SDL_EVENT_JOYSTICK_AXIS_MOTION
+                    || event.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN) && SDL_IsGamepad(event.jbutton.which))
+                continue;
+            if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+                if (event.gbutton.which != selected) continue;
+                SetKey(iKey, GAMEPAD_BUTTON_START + event.gbutton.button, iDevice);
+                done = true;
+            } else if (event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+                if (event.gaxis.which != selected) continue;
+                SDL_Keycode key = KEY_NONE;
+                if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX)
+                    key = event.gaxis.value < -JOYSTICK_DEAD_ZONE ? JOY_STICK_1_LEFT :
+                          event.gaxis.value > JOYSTICK_DEAD_ZONE ? JOY_STICK_1_RIGHT : KEY_NONE;
+                else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY)
+                    key = event.gaxis.value < -JOYSTICK_DEAD_ZONE ? JOY_STICK_1_UP :
+                          event.gaxis.value > JOYSTICK_DEAD_ZONE ? JOY_STICK_1_DOWN : KEY_NONE;
+                else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTX)
+                    key = event.gaxis.value < -JOYSTICK_DEAD_ZONE ? JOY_STICK_2_LEFT :
+                          event.gaxis.value > JOYSTICK_DEAD_ZONE ? JOY_STICK_2_RIGHT : KEY_NONE;
+                else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTY)
+                    key = event.gaxis.value < -JOYSTICK_DEAD_ZONE ? JOY_STICK_2_UP :
+                          event.gaxis.value > JOYSTICK_DEAD_ZONE ? JOY_STICK_2_DOWN : KEY_NONE;
+                if (key != KEY_NONE) {
+                    SetKey(iKey, key, iDevice);
                     done = true;
                 }
-            } else if (event.type == SDL_JOYHATMOTION) {
+            }
+            if (done) break;
+#endif
+            if (event.type == SDL_EVENT_KEY_DOWN) {
+                if (event.key.key == SDLK_ESCAPE) {
+                    done = true;
+                }
+            } else if (event.type == SDL_EVENT_JOYSTICK_HAT_MOTION) {
                 SDL_Keycode key = KEY_NONE;
 
                 if (event.jhat.value & SDL_HAT_UP) {
@@ -215,7 +250,7 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
                     SetKey(iKey, key, iDevice);
                     done = true;
                 }
-            } else if (event.type == SDL_JOYAXISMOTION) {
+            } else if (event.type == SDL_EVENT_JOYSTICK_AXIS_MOTION) {
                 SDL_Keycode key = KEY_NONE;
 
                 if (event.jaxis.axis == 0) {
@@ -248,8 +283,8 @@ MenuCodeEnum MI_InputControlField::SendInput(CPlayerInput *)
                     SetKey(iKey, key, iDevice);
                     done = true;
                 }
-            } else if (event.type == SDL_JOYBUTTONDOWN) {
-                if (event.jbutton.state == SDL_PRESSED) {
+            } else if (event.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN) {
+                if (event.jbutton.down) {
                     const SDL_Keycode key = event.jbutton.button + JOY_BUTTON_START;
                     SetKey(iKey, key, iDevice);
                     done = true;
@@ -314,8 +349,15 @@ void MI_InputControlField::Draw()
         rm->menu_font_large.drawChopRight(m_pos.x + iIndent + 8, m_pos.y + 5, iWidth - iIndent - 16, "(Press Button)");
     else if (iDevice == DEVICE_KEYBOARD)
         rm->menu_font_large.drawChopRight(m_pos.x + iIndent + 8, m_pos.y + 5, iWidth - iIndent - 16, SDL_GetKeyName(*iKey));
-    else
+#ifdef __ANDROID__
+    else if (*iKey >= GAMEPAD_BUTTON_START && *iKey < GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_COUNT)
+        rm->menu_font_large.drawChopRight(m_pos.x + iIndent + 8, m_pos.y + 5, iWidth - iIndent - 16,
+            SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(*iKey - GAMEPAD_BUTTON_START)));
+#endif
+    else if (*iKey >= 0 && *iKey < static_cast<SDL_Keycode>(std::size(Joynames)))
         rm->menu_font_large.drawChopRight(m_pos.x + iIndent + 8, m_pos.y + 5, iWidth - iIndent - 16, Joynames[*iKey]);
+    else
+        rm->menu_font_large.drawChopRight(m_pos.x + iIndent + 8, m_pos.y + 5, iWidth - iIndent - 16, "Other button");
 }
 
 
@@ -342,9 +384,12 @@ MI_InputControlContainer::MI_InputControlContainer(gfxSprite * spr_button, short
     miDeviceSelectField->setItemChangedCode(MENU_CODE_INPUT_DEVICE_CHANGED);
     miDeviceSelectField->add("Keyboard", -1);
 
-    for (short iJoystick = 0; iJoystick < joystickcount; iJoystick++) {
-        miDeviceSelectField->add(SDL_JoystickNameForIndex(iJoystick), iJoystick, false);
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetJoysticks(&count);
+    for (int iJoystick = 0; iJoystick < count; iJoystick++) {
+        miDeviceSelectField->add(SDL_GetJoystickNameForID(ids[iJoystick]), iJoystick, false);
     }
+    SDL_free(ids);
 
     //If the device is not found, default to the keyboard
     if (!miDeviceSelectField->setCurrentValue(iDevice)) {

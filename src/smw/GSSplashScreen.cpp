@@ -42,11 +42,22 @@ SplashScreenState& SplashScreenState::instance() {
 
 void SplashScreenState::onLeaveState()
 {
+    close();
+}
+
+void SplashScreenState::close()
+{
     delete menu_credits;
+    menu_credits = nullptr;
 }
 
 bool SplashScreenState::init()
 {
+    close();
+    alpha = 255;
+    state = 7;
+    timer = 120;
+    firstFrame = true;
     rm->loadStartGraphics();
 
 //  gfx_loadimagenocolorkey(&rm->menu_dpi_logo, convertPath("gfx/packs/menu/splash_72dpi.png", menugraphicspacklist->current_name()));
@@ -114,16 +125,16 @@ void SplashScreenState::update()
     while (SDL_PollEvent(&loop_event)) {
         switch (loop_event.type) {
 
-        case SDL_QUIT: {
+        case SDL_EVENT_QUIT: {
             game_values.appstate = AppState::Quit;
             return;
         }
         break;
 
-        case SDL_KEYDOWN: {
-            switch (loop_event.key.keysym.sym) {
+        case SDL_EVENT_KEY_DOWN: {
+            switch (loop_event.key.key) {
             case SDLK_RETURN:
-                if (loop_event.key.keysym.mod & (KMOD_LALT | KMOD_RALT)) {
+                if (loop_event.key.mod & (SDL_KMOD_LALT | SDL_KMOD_RALT)) {
                     game_values.fullscreen = !game_values.fullscreen;
                     gfx_changefullscreen(game_values.fullscreen);
                     blitdest = screen;
@@ -131,7 +142,7 @@ void SplashScreenState::update()
                 break;
 
             case SDLK_F4:
-                if (loop_event.key.keysym.mod & (KMOD_LALT | KMOD_RALT)) {
+                if (loop_event.key.mod & (SDL_KMOD_LALT | SDL_KMOD_RALT)) {
                     game_values.appstate = AppState::Quit;
                     return;
                 }
@@ -154,10 +165,12 @@ void SplashScreenState::update()
         game_values.playerInput.Update(loop_event, 1);
     }
 
+    // The menu's map preview needs tilesets created by loadAllGraphics below.
+    // Ignore early select/cancel input until the loading frame has completed.
     for (int iPlayer = 0; iPlayer < 4; iPlayer++) {
-        if (game_values.playerInput.outputControls[iPlayer].menu_select.fPressed ||
+        if (state >= 8 && (game_values.playerInput.outputControls[iPlayer].menu_select.fPressed ||
             game_values.playerInput.outputControls[iPlayer].menu_cancel.fPressed ||
-            game_values.playerInput.outputControls[iPlayer].menu_random.fPressed) {
+            game_values.playerInput.outputControls[iPlayer].menu_random.fPressed)) {
             //if (state <= 6)
             //{
             //  state = 6;
@@ -219,7 +232,7 @@ void SplashScreenState::update()
     //  }
     //}
 
-    SDL_FillRect(screen, NULL, 0x0);
+    SDL_FillSurfaceRect(screen, NULL, 0x0);
 
     //if (state == 0 || state == 1 || state == 2)
     //{

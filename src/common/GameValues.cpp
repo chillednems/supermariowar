@@ -27,21 +27,21 @@ extern GraphicsList *worldgraphicspacklist;
 extern GraphicsList *gamegraphicspacklist;
 extern SoundsList *soundpacklist;
 
-extern short joystickcount;
+extern int joystickcount;
 
 
 //[Keyboard/Joystick][Game/Menu][NumPlayers][NumKeys]  left, right, jump, down, turbo, powerup, start, cancel
 SDL_Keycode controlkeys[2][2][4][NUM_KEYS] = { { { {SDLK_LEFT, SDLK_RIGHT, SDLK_UP, SDLK_DOWN, SDLK_RCTRL, SDLK_RSHIFT, SDLK_RETURN, SDLK_ESCAPE},
-            {SDLK_a, SDLK_d, SDLK_w, SDLK_s, SDLK_e, SDLK_q, SDLK_UNKNOWN, SDLK_UNKNOWN},
-            {SDLK_g, SDLK_j, SDLK_y, SDLK_h, SDLK_u, SDLK_t, SDLK_UNKNOWN, SDLK_UNKNOWN},
-            {SDLK_l, SDLK_QUOTE, SDLK_p, SDLK_SEMICOLON, SDLK_LEFTBRACKET, SDLK_o, SDLK_UNKNOWN, SDLK_UNKNOWN}
+            {SDLK_A, SDLK_D, SDLK_W, SDLK_S, SDLK_E, SDLK_Q, SDLK_UNKNOWN, SDLK_UNKNOWN},
+            {SDLK_G, SDLK_J, SDLK_Y, SDLK_H, SDLK_U, SDLK_T, SDLK_UNKNOWN, SDLK_UNKNOWN},
+            {SDLK_L, SDLK_APOSTROPHE, SDLK_P, SDLK_SEMICOLON, SDLK_LEFTBRACKET, SDLK_O, SDLK_UNKNOWN, SDLK_UNKNOWN}
         },
 
         //up, down, left, right, select, cancel, random, fast scroll
         {   {SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT, SDLK_RETURN, SDLK_ESCAPE, SDLK_SPACE,  SDLK_LSHIFT},
-            {SDLK_w, SDLK_s, SDLK_a, SDLK_d, SDLK_e, SDLK_q, SDLK_UNKNOWN, SDLK_UNKNOWN},
-            {SDLK_y, SDLK_h, SDLK_g, SDLK_j, SDLK_u, SDLK_t, SDLK_UNKNOWN, SDLK_UNKNOWN},
-            {SDLK_p, SDLK_SEMICOLON, SDLK_l, SDLK_QUOTE, SDLK_LEFTBRACKET, SDLK_o, SDLK_UNKNOWN, SDLK_UNKNOWN}
+            {SDLK_W, SDLK_S, SDLK_A, SDLK_D, SDLK_E, SDLK_Q, SDLK_UNKNOWN, SDLK_UNKNOWN},
+            {SDLK_Y, SDLK_H, SDLK_G, SDLK_J, SDLK_U, SDLK_T, SDLK_UNKNOWN, SDLK_UNKNOWN},
+            {SDLK_P, SDLK_SEMICOLON, SDLK_L, SDLK_APOSTROPHE, SDLK_LEFTBRACKET, SDLK_O, SDLK_UNKNOWN, SDLK_UNKNOWN}
         }
     },
     //left, right, jump, down, turbo, powerup, start, cancel;
@@ -127,7 +127,11 @@ void CGameValues::init()
 {
     //set standard game values
     playercontrol[0]  = 1;
+#ifdef __ANDROID__
+    playercontrol[1]  = 2; // Ready-to-play local CPU opponent on first launch.
+#else
     playercontrol[1]  = 1;
+#endif
     showfps       = false;
     frameadvance    = false;
     autokill      = false;
@@ -242,8 +246,28 @@ void CGameValues::init()
             }
         }
 
+#ifdef __ANDROID__
+        const SDL_Keycode gamepadKeys[2][NUM_KEYS] = {
+            {JOY_STICK_1_LEFT, JOY_STICK_1_RIGHT, GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_SOUTH,
+             JOY_STICK_1_DOWN, GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_NORTH,
+             GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_WEST, GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_START,
+             GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_BACK},
+            {JOY_STICK_1_UP, JOY_STICK_1_DOWN, JOY_STICK_1_LEFT, JOY_STICK_1_RIGHT,
+             GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_SOUTH, GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_EAST,
+             GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_WEST,
+             GAMEPAD_BUTTON_START + SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER}
+        };
+        for (int mode = 0; mode < 2; ++mode)
+            for (int key = 0; key < NUM_KEYS; ++key)
+                inputConfiguration[iPlayer][1].inputGameControls[mode].keys[key] = gamepadKeys[mode][key];
+#endif
+
         //Set the players input to the default configuration (will be overwritten by options.bin settings)
         playerInput.inputControls[iPlayer] = &inputConfiguration[iPlayer][0];
+#ifdef __ANDROID__
+        if (iPlayer == 0 && joystickcount > 0)
+            playerInput.inputControls[iPlayer] = &inputConfiguration[iPlayer][1];
+#endif
     }
 
     //Set the default powerup weights for bonus wheel and [?] boxes
@@ -406,7 +430,25 @@ void CGameConfig::ReadBinaryConfig() {
     }
 
     try {
-        std::string controls_path(GetHomeDirectory() + "controls.sdl2.bin");
+        std::string controls_path(GetHomeDirectory() +
+#ifdef __ANDROID__
+            "controls.sdl3.bin"
+#else
+            "controls.sdl2.bin"
+#endif
+        );
+#ifdef __ANDROID__
+        if (!FileExists(controls_path)) {
+            BinaryFile oldControls(GetHomeDirectory() + "controls.sdl2.bin", "rb");
+            if (oldControls.is_open()) {
+                CInputPlayerControl previous[4][2];
+                oldControls.read_raw(previous, sizeof(previous));
+                for (int player = 0; player < MAX_PLAYERS; ++player)
+                    inputConfiguration[player][0] = previous[player][0];
+            }
+            return;
+        }
+#endif
         BinaryFile controls(controls_path, "rb");
         if (!controls.is_open())
             throw std::runtime_error("Could not open " + controls_path);
@@ -538,7 +580,13 @@ void CGameConfig::WriteConfig() const
     }
 
     try {
-        std::string controls_path(GetHomeDirectory() + "controls.sdl2.bin");
+        std::string controls_path(GetHomeDirectory() +
+#ifdef __ANDROID__
+            "controls.sdl3.bin"
+#else
+            "controls.sdl2.bin"
+#endif
+        );
         BinaryFile controls(controls_path, "wb");
         if (!controls.is_open())
             throw std::runtime_error("Could not open " + controls_path);

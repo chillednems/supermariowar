@@ -119,6 +119,40 @@ MenuState& MenuState::instance()
     return menu;
 }
 
+void MenuState::close()
+{
+    mCurrentMenu = nullptr;
+    szCurrentMapName = nullptr;
+    mNetRoomMenu.reset();
+    mNetNewRoomSettingsMenu.reset();
+    mNetNewRoomMenu.reset();
+    mNetLobbyMenu.reset();
+    mNetEditServersMenu.reset();
+    mNetServersMenu.reset();
+    mBonusWheelMenu.reset();
+    mTournamentScoreboardMenu.reset();
+    mTeamSelectMenu.reset();
+    mWorldMenu.reset();
+    mTourStopMenu.reset();
+    mMapFilterEditMenu.reset();
+    mGameSettingsMenu.reset();
+    mMatchSelectionMenu.reset();
+    mModeOptionsMenu.reset();
+    mPlayerControlsMenu.reset();
+    mPlayerControlsSelectMenu.reset();
+    mSoundOptionsMenu.reset();
+    mEyeCandyOptionsMenu.reset();
+    mGraphicsOptionsMenu.reset();
+    mProjectileOptionsMenu.reset();
+    mProjectileLimitsMenu.reset();
+    mPowerupSettingsMenu.reset();
+    mPowerupDropRatesMenu.reset();
+    mTeamOptionsMenu.reset();
+    mGameplayOptionsMenu.reset();
+    mOptionsMenu.reset();
+    mMainMenu.reset();
+}
+
 bool MenuState::init()
 {
     mMainMenu = std::make_unique<UI_MainMenu>();
@@ -395,28 +429,28 @@ void MenuState::update()
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
-        case SDL_QUIT:
+        case SDL_EVENT_QUIT:
             Exit();
             return;
             break;
 
-        case SDL_KEYDOWN: {
-            if (event.key.keysym.sym == SDLK_F1) {
+        case SDL_EVENT_KEY_DOWN: {
+            if (event.key.key == SDLK_F1) {
                 game_values.showfps = !game_values.showfps;
             }
 
 #ifdef _DEBUG
-            if (event.key.keysym.sym == SDLK_F2) {
+            if (event.key.key == SDLK_F2) {
                 game_values.frameadvance = !game_values.frameadvance;
             }
 #endif
-            if (event.key.keysym.mod & (KMOD_LALT | KMOD_RALT)) {
+            if (event.key.mod & (SDL_KMOD_LALT | SDL_KMOD_RALT)) {
                 //ALT + F4 = close window
-                if (event.key.keysym.sym == SDLK_F4) {
+                if (event.key.key == SDLK_F4) {
                     Exit();
                     return;
                 } //ALT + Enter = fullscreen/windowed toggle
-                else if (event.key.keysym.sym == SDLK_RETURN) {
+                else if (event.key.key == SDLK_RETURN) {
                     game_values.fullscreen = !game_values.fullscreen;
 					gfx_changefullscreen(game_values.fullscreen);
                     blitdest = screen;
@@ -425,12 +459,12 @@ void MenuState::update()
                 }
             }
 
-            if (event.key.keysym.sym == SDLK_INSERT) {
+            if (event.key.key == SDLK_INSERT) {
                 gfx_take_screenshot();
             }
 #ifdef _DEBUG
             //Pressing insert in debug mode turns on automated testing
-            if (event.key.keysym.sym == SDLK_F8) {
+            if (event.key.key == SDLK_F8) {
                 g_fAutoTest = !g_fAutoTest;
 
                 if (g_fAutoTest) {
@@ -441,7 +475,7 @@ void MenuState::update()
                 }
             }
 
-            if (event.key.keysym.sym == SDLK_HOME) {
+            if (event.key.key == SDLK_HOME) {
                 g_fRecordTest = !g_fRecordTest;
 
                 if (g_fRecordTest) {
@@ -451,7 +485,7 @@ void MenuState::update()
                 }
             }
 
-            if (event.key.keysym.sym == SDLK_END) {
+            if (event.key.key == SDLK_END) {
                 AddEmtpyLineToScript();
             }
 
@@ -1247,7 +1281,7 @@ void MenuState::update()
     if (mCurrentMenu != mWorldMenu.get())
         rm->menu_backdrop.draw(0, 0);
     else
-        SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
+        SDL_FillSurfaceRect(screen, NULL, SDL_MapSurfaceRGB(screen, 0, 0, 0));
 
     mCurrentMenu->Update();
     mCurrentMenu->Draw();

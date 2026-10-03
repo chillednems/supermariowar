@@ -55,6 +55,7 @@
 
 #include "FPSLimiter.h"
 #include "GSSplashScreen.h"
+#include "GSMenu.h"
 
 #include <ctime>
 #include <cmath>
@@ -71,6 +72,8 @@
     extern "C" FILE * __cdecl __iob_func(void) { return _iob; }
 #endif
 #endif
+
+#include <SDL3/SDL_main.h>
 
 
 //now it's really time for an "engine" (aka resource manager)
@@ -105,7 +108,7 @@ CGM_Boxes_MiniGame	*boxesgamemode = NULL;
 short currentgamemode = 0;
 
 extern SDL_Joystick     **joysticks;
-extern short            joystickcount;
+extern int              joystickcount;
 
 extern CMap* g_map;
 extern CTilesetManager* g_tilesetmanager;
@@ -210,15 +213,77 @@ void create_globals()
 
 void init_joysticks()
 {
-    SDL_InitSubSystem(SDL_INIT_JOYSTICK);
-    joystickcount = (short)SDL_NumJoysticks();
+#ifdef __ANDROID__
+    ResetAndroidGamepadAssignments();
+#endif
+    SDL_JoystickID* ids = SDL_GetJoysticks(&joystickcount);
     joysticks = new SDL_Joystick*[joystickcount];
 
-    for (short i = 0; i < joystickcount; i++)
-        joysticks[i] = SDL_JoystickOpen(i);
+    for (int i = 0; i < joystickcount; i++) {
+        joysticks[i] = SDL_OpenJoystick(ids[i]);
+#ifdef __ANDROID__
+        if (SDL_IsGamepad(ids[i]))
+            SDL_OpenGamepad(ids[i]);
+#endif
+    }
+    SDL_free(ids);
 
-    SDL_JoystickEventState(SDL_ENABLE);
+    SDL_SetJoystickEventsEnabled(true);
 }
+
+#ifdef __ANDROID__
+void close_joysticks()
+{
+    for (int i = 0; i < joystickcount; ++i) {
+        if (SDL_Gamepad* pad = SDL_GetGamepadFromID(SDL_GetJoystickID(joysticks[i])))
+            SDL_CloseGamepad(pad);
+        SDL_CloseJoystick(joysticks[i]);
+    }
+    delete[] joysticks;
+    joysticks = nullptr;
+    joystickcount = 0;
+}
+
+void close_globals()
+{
+    SplashScreenState::instance().close();
+    MenuState::instance().close();
+    for (CPlayer* player : players)
+        delete player;
+    players.clear();
+
+    for (short i = 0; i < GAMEMODE_LAST; ++i) {
+        delete gamemodes[i];
+        gamemodes[i] = nullptr;
+    }
+    delete bonushousemode; bonushousemode = nullptr;
+    delete pipegamemode; pipegamemode = nullptr;
+    delete bossgamemode; bossgamemode = nullptr;
+    delete boxesgamemode; boxesgamemode = nullptr;
+    game_values.gamemode = nullptr;
+
+    for (short i = 0; i < MAX_PLAYERS; ++i) {
+        delete score[i];
+        score[i] = nullptr;
+    }
+    delete rm; rm = nullptr;
+    delete g_map; g_map = nullptr;
+    delete g_tilesetmanager; g_tilesetmanager = nullptr;
+
+    delete gamegraphicspacklist; gamegraphicspacklist = nullptr;
+    delete worldgraphicspacklist; worldgraphicspacklist = nullptr;
+    delete menugraphicspacklist; menugraphicspacklist = nullptr;
+    delete worldlist; worldlist = nullptr;
+    delete tourlist; tourlist = nullptr;
+    delete announcerlist; announcerlist = nullptr;
+    delete soundpacklist; soundpacklist = nullptr;
+    delete worldmusiclist; worldmusiclist = nullptr;
+    delete musiclist; musiclist = nullptr;
+    delete skinlist; skinlist = nullptr;
+    delete maplist; maplist = nullptr;
+    delete filterslist; filterslist = nullptr;
+}
+#endif
 
 void create_gamemodes()
 {
@@ -305,6 +370,16 @@ int main(int argc, char *argv[])
     }
     if (!cmd.data_root.empty())
         RootDataDirectory = cmd.data_root;
+#ifdef __ANDROID__
+    else {
+        const std::string home = GetHomeDirectory();
+        if (home.empty()) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "No app-private data path: %s", SDL_GetError());
+            return 1;
+        }
+        RootDataDirectory = home + "data";
+    }
+#endif
 
 
     try {
@@ -337,6 +412,7 @@ void main_game()
     printf("-------------------------------------------------------------------------------\n");
     printf("\n---------------- startup ----------------\n");
 
+    App::registerSdlMetadata(TITLESTRING);
     ensureSettingsDir();
     create_globals();
 
@@ -366,7 +442,7 @@ void main_game()
     char title[128];
     sprintf(title, "%s %s %s", TITLESTRING, GIT_REVISION, GIT_DATE);
     gfx_settitle(title);
-    SDL_ShowCursor(SDL_DISABLE);
+    SDL_HideCursor();
 
     printf("\n---------------- loading ----------------\n");
 
@@ -406,6 +482,9 @@ void main_game()
     if (!fLoadOK) {
         printf("\n---------------- EXIT DURING LOADING ----------------\n\n");
         sfx_close();
+#ifdef __ANDROID__
+        close_joysticks();
+#endif
         gfx_close();
         net_close();
         return 0;
@@ -424,6 +503,13 @@ void main_game()
 
     printf("\n---------------- shutdown ----------------\n");
 
+#ifdef __ANDROID__
+    net_close();
+    close_globals();
+    sfx_close();
+    close_joysticks();
+    gfx_close();
+#else
     for (short i = 0; i < GAMEMODE_LAST; i++)
         delete gamemodes[i];
 
@@ -438,4 +524,5 @@ void main_game()
 
 	// release all resources
 	delete rm;
+#endif
 }
